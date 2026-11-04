@@ -30,7 +30,7 @@ BUF_SIZE :: usize(4096);
 // Parse an HTTP/1.1 request from a raw string.
 // Parses the request line (method, path, version) and headers.
 // Returns Result(HttpRequest, String).
-parse_request :: (fn(raw : String) -> Result(HttpRequest, String))({
+parse_request :: (fn(raw : &String) -> Result(HttpRequest, String))({
   lines := raw.split(`\r\n`);
   cond(
     (lines.len() == usize(0)) => {
@@ -40,7 +40,7 @@ parse_request :: (fn(raw : String) -> Result(HttpRequest, String))({
   );
 
   // Parse request line: "GET /path HTTP/1.1"
-  request_line := lines.get(usize(0)).unwrap();
+  request_line := lines.get_cloned(usize(0)).unwrap();
   cond(
     request_line.is_empty() => {
       return(.Err(`Empty request line`));
@@ -84,13 +84,13 @@ parse_request :: (fn(raw : String) -> Result(HttpRequest, String))({
     }
   );
 
-  req := HttpRequest.new(method, path);
+  req := HttpRequest.new(method, &path);
 
   // Parse headers
-  j := usize(1);
-  body_start := lines.len();
+  mut(j) := usize(1);
+  mut(body_start) := lines.len();
   while(j < lines.len(), j = (j + usize(1)), {
-    hline := lines.get(j).unwrap();
+    hline := lines.get_cloned(j).unwrap();
     cond(
       hline.is_empty() => {
         body_start = (j + usize(1));
@@ -103,7 +103,7 @@ parse_request :: (fn(raw : String) -> Result(HttpRequest, String))({
             colon := colon_opt.unwrap();
             hname := hline.substring(usize(0), colon).trim();
             hval := hline.substring(colon + usize(1), hline.len()).trim();
-            req.set_header(hname, hval);
+            req.set_header(&hname, &hval);
           },
           true => ()
         );
@@ -114,12 +114,12 @@ parse_request :: (fn(raw : String) -> Result(HttpRequest, String))({
   // Parse body (if present)
   cond(
     (body_start < lines.len()) => {
-      body := lines.get(body_start).unwrap();
-      m := (body_start + usize(1));
+      mut(body) := lines.get_cloned(body_start).unwrap();
+      mut(m) := (body_start + usize(1));
       while(m < lines.len(), m = (m + usize(1)), {
-        body = `${body}\r\n${lines.get(m).unwrap()}`;
+        body = `${body}\r\n${lines(m)}`;
       });
-      req.set_body(body);
+      req.set_body(&body);
     },
     true => ()
   );
@@ -131,20 +131,20 @@ parse_request :: (fn(raw : String) -> Result(HttpRequest, String))({
 // HTTP Response Serialization
 // ============================================================================
 // Serialize an HTTP response to a string ready to send over TCP.
-serialize_response :: (fn(status : i32, content_type : String, body : String) -> String)({
+serialize_response :: (fn(status : i32, content_type : &String, body : &String) -> String)({
   status_code := StatusCode.from_u16(u16(status));
   status_text := cond(status_code.is_some() => status_code.unwrap().reason(), true => `Unknown`);
-  body_len := body.as_bytes().len();
+  body_len := body.len();
 
   // Format Content-Length as string
   len_buf := Array(u8, usize(16)).fill(u8(0));
-  unsafe(snprintf((*char)(&len_buf(usize(0))), usize(16), "%d", i32(body_len)));
-  len_str := String.from_cstr(&len_buf(usize(0))).unwrap();
+  unsafe(snprintf((*char)(addr_of(len_buf(usize(0)))), usize(16), "%d", i32(body_len)));
+  len_str := String.from_cstr(addr_of(len_buf(usize(0)))).unwrap();
 
   // Format status code as string
   code_buf := Array(u8, usize(8)).fill(u8(0));
-  unsafe(snprintf((*char)(&code_buf(usize(0))), usize(8), "%d", status));
-  code_str := String.from_cstr(&code_buf(usize(0))).unwrap();
+  unsafe(snprintf((*char)(addr_of(code_buf(usize(0)))), usize(8), "%d", status));
+  code_str := String.from_cstr(addr_of(code_buf(usize(0)))).unwrap();
 
   `HTTP/1.1 ${code_str} ${status_text}\r\nContent-Type: ${content_type}\r\nContent-Length: ${len_str}\r\nConnection: close\r\n\r\n${body}`
 });
@@ -168,34 +168,34 @@ handle_json :: (fn() -> String)(
   serialize_response(i32(200), `application/json`, `{"message":"Hello from Yo!","language":"Yo","features":["async/await","algebraic effects","compile to C"]}`)
 );
 
-handle_echo :: (fn(req : HttpRequest) -> String)({
-  body := `<!DOCTYPE html><html><head><title>Echo</title><style>body{font-family:sans-serif;max-width:600px;margin:40px auto;padding:0 20px}h1{color:#2563eb}table{border-collapse:collapse;width:100%}td,th{border:1px solid #e2e8f0;padding:8px;text-align:left}th{background:#f8fafc}</style></head><body><h1>Request Echo</h1><table><tr><th>Method</th><td>${req.method.to_string()}</td></tr><tr><th>Path</th><td>${req.path}</td></tr>`;
+handle_echo :: (fn(req : &HttpRequest) -> String)({
+  mut(body) := `<!DOCTYPE html><html><head><title>Echo</title><style>body{font-family:sans-serif;max-width:600px;margin:40px auto;padding:0 20px}h1{color:#2563eb}table{border-collapse:collapse;width:100%}td,th{border:1px solid #e2e8f0;padding:8px;text-align:left}th{background:#f8fafc}</style></head><body><h1>Request Echo</h1><table><tr><th>Method</th><td>${req.method.to_string()}</td></tr><tr><th>Path</th><td>${req.path}</td></tr>`;
 
   // Add headers
   body = `${body}<tr><th colspan="2">Headers</th></tr>`;
   headers := req.headers.entries();
-  i := usize(0);
+  mut(i) := usize(0);
   while(i < headers.len(), i = (i + usize(1)), {
-    h := headers.get(i).unwrap();
+    h := headers.get_cloned(i).unwrap();
     body = `${body}<tr><td>${h.name}</td><td>${h.value}</td></tr>`;
   });
 
   body = `${body}</table></body></html>`;
-  serialize_response(i32(200), `text/html; charset=utf-8`, body)
+  serialize_response(i32(200), `text/html; charset=utf-8`, &body)
 });
 
-handle_not_found :: (fn(path : String) -> String)(
+handle_not_found :: (fn(path : &String) -> String)(
   serialize_response(i32(404), `text/plain; charset=utf-8`, `404 Not Found: ${path}`)
 );
 
 // Route a parsed request to the appropriate handler.
-route :: (fn(req : HttpRequest) -> String)(
+route :: (fn(req : &HttpRequest) -> String)(
   cond(
     (req.path == `/`) => handle_root(),
     (req.path == `/hello`) => handle_hello(),
     (req.path == `/json`) => handle_json(),
     (req.path == `/echo`) => handle_echo(req),
-    true => handle_not_found(req.path)
+    true => handle_not_found(&req.path)
   )
 );
 
@@ -203,7 +203,7 @@ route :: (fn(req : HttpRequest) -> String)(
 // Connection Handler
 // ============================================================================
 // Read a request from the stream, parse it, route it, and send the response.
-handle_connection :: (fn(stream : TcpStream, io : Io, exn : Exception) -> Impl(Future(unit, IoExn)))(
+handle_connection :: (fn(sink(stream) : TcpStream, io : Io, exn : &Exception) -> Impl(Future(unit, IoExn)))(
   io.async(e => {
     // Read raw bytes
     buf := (*u8)(malloc(BUF_SIZE).unwrap());
@@ -216,8 +216,8 @@ handle_connection :: (fn(stream : TcpStream, io : Io, exn : Exception) -> Impl(F
       },
       true => {
         // Build String from raw bytes
-        bytes := ArrayList(u8).new();
-        i := usize(0);
+        mut(bytes) := ArrayList(u8).new();
+        mut(i) := usize(0);
         while(i < n, i = (i + usize(1)), {
           bytes.push((buf.add(i)).*);
         });
@@ -225,13 +225,13 @@ handle_connection :: (fn(stream : TcpStream, io : Io, exn : Exception) -> Impl(F
         raw := String.from_bytes(bytes);
 
         // Parse and route
-        result := parse_request(raw);
+        result := parse_request(&raw);
         response := match(
           result,
           .Ok(req) => {
             // Log the request
             println(`${req.method.to_string()} ${req.path}`);
-            route(req)
+            route(&req)
           },
           .Err(msg) => {
             println(`Bad request: ${msg}`);
@@ -240,7 +240,7 @@ handle_connection :: (fn(stream : TcpStream, io : Io, exn : Exception) -> Impl(F
         );
 
         // Send response
-        e.io.await(stream.write_string(response, e.io), e);
+        e.io.await(stream.write_string(&response, e.io), e);
         e.io.await(stream.close(e.io), e);
       }
     );
@@ -267,7 +267,7 @@ main :: (fn(io : Io) -> unit)({
   println(`Listening on http://0.0.0.0:${port}`);
 
   // Accept loop
-  while(runtime(true), {
+  while(true, {
     stream := io.await(listener.accept(io), e);
     // Per-connection error handler: log and continue, don't crash the server
     conn_exn := Exception(
@@ -278,7 +278,7 @@ main :: (fn(io : Io) -> unit)({
         }
       )
     );
-    io.await(handle_connection(stream, io, conn_exn), e);
+    io.await(handle_connection(stream, io, &conn_exn), e);
   });
 });
 

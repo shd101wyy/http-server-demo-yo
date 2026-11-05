@@ -1,4 +1,4 @@
-# http_server_demo_yo
+# http-server-demo-yo
 
 A simple HTTP/1.1 server written in the [Yo programming language](https://github.com/nicolo-ribaudo/yo-lang).
 
@@ -23,7 +23,7 @@ A simple HTTP/1.1 server written in the [Yo programming language](https://github
 
 ```bash
 yo build
-./yo-out/bin/http_server_demo_yo
+./yo-out/bin/http-server-demo-yo
 ```
 
 Then visit <http://localhost:8080> or test with curl:
@@ -38,7 +38,7 @@ curl -H "X-Custom: test" http://localhost:8080/echo
 ## Project Structure
 
 ```
-http_server_demo_yo/
+http-server-demo-yo/
 ├── yo.toml           # Package manifest — [package], [dependencies]
 ├── build.yo          # Build configuration
 ├── src/

@@ -84,7 +84,7 @@ parse_request :: (fn(raw : &String) -> Result(HttpRequest, String))({
     }
   );
 
-  req := HttpRequest.new(method, &path);
+  mut(req) := HttpRequest.new(method, &path);
 
   // Parse headers
   mut(j) := usize(1);

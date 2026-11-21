@@ -9,7 +9,7 @@
 { SocketAddr, IpAddr } :: import("std/net/addr");
 { Error, AnyError, Exception, IoExn } :: import("std/error");
 { HttpMethod, HttpHeader, HttpRequest, HttpResponse, StatusCode } :: import("std/http/http");
-{ ArrayList } :: import("std/collections/array_list");
+{ ArrayList } :: import("std/collections/array-list");
 { String } :: import("std/string");
 { println } :: import("std/fmt");
 { GlobalAllocator } :: import("std/allocator");
